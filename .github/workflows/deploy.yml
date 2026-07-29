@@ -87,7 +87,7 @@ jobs:
           script: |
             set -e
             echo "==> Deploying medstore-platform..."
-            cd /home/max/websites/med-store
+            cd /home/max/websites/med-store/e-commerce-medical
 
             # Pull the latest images (built and pushed in job 1)
             docker compose pull
