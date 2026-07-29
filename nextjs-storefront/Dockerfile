@@ -40,7 +40,7 @@ ENV NEXT_PUBLIC_SHOP_WHATSAPP=$NEXT_PUBLIC_SHOP_WHATSAPP
 ENV NEXT_PUBLIC_SHOP_ADDRESS=$NEXT_PUBLIC_SHOP_ADDRESS
 ENV NEXT_PUBLIC_SHOP_HOURS=$NEXT_PUBLIC_SHOP_HOURS
 
-RUN npm run build
+RUN mkdir -p public && npm run build
 
 # ─────────────────────────────────────────────────────────────────
 # Stage 3: Runtime (standalone)
@@ -60,6 +60,8 @@ ENV HOSTNAME=0.0.0.0
 
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+# public/ may be empty — create it first, then copy contents if any exist
+RUN mkdir -p public
 COPY --from=builder /app/public ./public
 
 EXPOSE 3000
