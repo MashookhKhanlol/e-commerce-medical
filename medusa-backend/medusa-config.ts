@@ -17,24 +17,20 @@ module.exports = defineConfig({
   },
   modules: [
     // ──────────────────────────────────────────────────────────────
-    // File Module → Cloudinary Provider
-    // Images uploaded via Medusa Admin are stored in Cloudinary.
-    // @tsc_tech/medusa-plugin-cloudinary requires >= 2.4.0
+    // File Module → Local Storage (default)
+    // Images uploaded via Medusa Admin are stored on VPS disk.
+    // Cloudinary can be wired in later once the site is live.
     // ──────────────────────────────────────────────────────────────
     {
       resolve: "@medusajs/file",
       options: {
         providers: [
           {
-            resolve: "@tsc_tech/medusa-plugin-cloudinary",
-            id: "cloudinary",
+            resolve: "@medusajs/file-local",
+            id: "local",
             options: {
-              cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-              apiKey: process.env.CLOUDINARY_API_KEY,
-              apiSecret: process.env.CLOUDINARY_API_SECRET,
-              // All product images go under medstore/ folder in Cloudinary
-              folderName: process.env.CLOUDINARY_FOLDER ?? "medstore",
-              secure: true,
+              upload_dir: "uploads",
+              backend_url: `${process.env.MEDUSA_BACKEND_URL}/uploads`,
             },
           },
         ],

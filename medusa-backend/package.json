@@ -11,16 +11,15 @@
     "db:migrate": "medusa db:migrate"
   },
   "dependencies": {
-    "@medusajs/medusa": "^2.6.0",
-    "@medusajs/framework": "^2.6.0",
-    "@medusajs/inventory": "^2.6.0",
-    "@medusajs/stock-location": "^2.6.0",
-    "@tsc_tech/medusa-plugin-cloudinary": "^1.0.0",
+    "@medusajs/medusa": "^2.4.0",
+    "@medusajs/framework": "^2.4.0",
+    "@medusajs/file-local": "^2.4.0",
+    "@medusajs/inventory": "^2.4.0",
+    "@medusajs/stock-location": "^2.4.0",
     "pg": "^8.13.0",
     "ioredis": "^5.3.2"
   },
   "devDependencies": {
-    "@medusajs/cli": "^2.6.0",
     "@types/node": "^20.0.0",
     "typescript": "^5.3.0"
   },
