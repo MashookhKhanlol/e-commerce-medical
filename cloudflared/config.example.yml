@@ -1,0 +1,34 @@
+# cloudflared/config.example.yml
+#
+# Add these three ingress rules to your EXISTING cloudflared config.yml
+# before the catch-all rule at the bottom.
+#
+# All three subdomains route to the same Docker network,
+# accessed by service name (container_name).
+#
+# DNS records to create in Cloudflare Dashboard (flowcrafted.me zone):
+#   Name                     Type    Target                          Proxy
+#   medstore                 CNAME   <tunnel-id>.cfargotunnel.com    YES (orange)
+#   api.medstore             CNAME   <tunnel-id>.cfargotunnel.com    YES (orange)
+#   admin.medstore           CNAME   <tunnel-id>.cfargotunnel.com    YES (orange)
+
+ingress:
+  # ── EXISTING RULES (keep yours above this block) ─────────────────
+
+  # Customer-facing Next.js storefront
+  - hostname: medstore.flowcrafted.me
+    service: http://medstore-storefront:3000
+
+  # Medusa Store API + Admin API
+  # Store API:  /store/* (read-only, used by Next.js via publishable key)
+  # Admin API:  /admin/* (used by n8n sync workflow via admin API key)
+  - hostname: api.medstore.flowcrafted.me
+    service: http://medusa-backend:9000
+
+  # Medusa Admin UI — same backend, different hostname for clean bookmarks
+  # Shop owner accesses: https://admin.medstore.flowcrafted.me/app
+  - hostname: admin.medstore.flowcrafted.me
+    service: http://medusa-backend:9000
+
+  # ── CATCH-ALL (must remain last) ─────────────────────────────────
+  - service: http_status:404

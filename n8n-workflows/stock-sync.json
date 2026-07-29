@@ -1,0 +1,391 @@
+{
+  "name": "MedStore — Google Sheets → Medusa Stock Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 15 }]
+        }
+      },
+      "id": "node-schedule-trigger",
+      "name": "Schedule Trigger (15 min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [260, 300],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stock",
+          "mode": "name"
+        },
+        "options": {
+          "range": "A2:H",
+          "headerRow": 1
+        }
+      },
+      "id": "node-read-sheet",
+      "name": "Read Stock Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [480, 300],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Google Sheets - Medstore Service Account" }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "id": "node-split-batches",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "position": [700, 300],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform Google Sheet row into Medusa payload\n// Column mapping: A=SKU, B=Name, C=Category, D=Quantity, E=MRP, F=Expiry, G=Batch, H=Notes\n\nconst categoryHandleMap = {\n  'OTC': 'otc',\n  'Prescription': 'prescription',\n  'Ayurvedic': 'ayurvedic',\n  'Wellness': 'wellness',\n  'Diagnostics': 'diagnostics',\n  'Baby': 'baby-mother',\n  'Personal': 'personal-care',\n};\n\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const row = item.json;\n  \n  const sku = String(row['SKU'] || '').trim();\n  const name = String(row['Medicine Name'] || '').trim();\n  const category = String(row['Category'] || '').trim();\n  const quantity = parseInt(String(row['Quantity'] || '0'), 10);\n  const mrp = parseFloat(String(row['MRP (₹)'] || '0'));\n  const expiryDate = String(row['Expiry Date'] || '').trim();\n  const batchNo = String(row['Batch No'] || '').trim();\n  \n  // Skip rows with no SKU or name\n  if (!sku || !name) continue;\n  \n  const categoryHandle = categoryHandleMap[category] || 'otc';\n  \n  // Medusa stores prices in paise (smallest currency unit)\n  const priceInPaise = Math.round(mrp * 100);\n  \n  // Create a URL-friendly handle from name + SKU\n  const handle = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${sku.toLowerCase()}`;\n  \n  results.push({\n    json: {\n      sku,\n      title: name,\n      handle,\n      category_handle: categoryHandle,\n      quantity: isNaN(quantity) ? 0 : quantity,\n      price_paise: isNaN(priceInPaise) ? 0 : priceInPaise,\n      expiry_date: expiryDate,\n      batch_no: batchNo,\n      _raw_category: category,\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "node-transform-row",
+      "name": "Transform Row → Medusa Shape",
+      "type": "n8n-nodes-base.code",
+      "position": [920, 300],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $vars.MEDUSA_BACKEND_URL }}/admin/products",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "q", "value": "={{ $json.sku }}" }]
+        },
+        "options": {}
+      },
+      "id": "node-check-product-exists",
+      "name": "Check Product Exists by SKU",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1140, 300],
+      "typeVersion": 4.2,
+      "credentials": {
+        "httpHeaderAuth": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Medusa Admin API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-product-exists",
+              "leftValue": "={{ $json.products.length }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-exists",
+      "name": "Product Already Exists?",
+      "type": "n8n-nodes-base.if",
+      "position": [1360, 300],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// TRUE branch: Product exists — get IDs needed for update\nconst product = $json.products[0];\nconst variant = product.variants?.[0];\nconst inventoryItem = variant?.inventory_items?.[0]?.inventory_item_id;\n\nreturn [{\n  json: {\n    ...$('Transform Row → Medusa Shape').item.json,\n    product_id: product.id,\n    variant_id: variant?.id,\n    inventory_item_id: inventoryItem,\n  }\n}];"
+      },
+      "id": "node-extract-ids",
+      "name": "Extract Product IDs",
+      "type": "n8n-nodes-base.code",
+      "position": [1580, 160],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.MEDUSA_BACKEND_URL }}/admin/inventory-items/{{ $json.inventory_item_id }}/location-levels/{{ $vars.MEDUSA_STOCK_LOCATION_ID }}",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "stocked_quantity": "={{ $json.quantity }}"
+        },
+        "options": {}
+      },
+      "id": "node-update-inventory",
+      "name": "Update Inventory Quantity",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1800, 100],
+      "typeVersion": 4.2,
+      "credentials": {
+        "httpHeaderAuth": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Medusa Admin API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.MEDUSA_BACKEND_URL }}/admin/products/{{ $('Extract Product IDs').item.json.product_id }}/variants/{{ $('Extract Product IDs').item.json.variant_id }}",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "prices": [
+            {
+              "amount": "={{ $('Extract Product IDs').item.json.price_paise }}",
+              "currency_code": "inr",
+              "region_id": "={{ $vars.MEDUSA_INDIA_REGION_ID }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-update-price",
+      "name": "Update Variant Price",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1800, 220],
+      "typeVersion": 4.2,
+      "credentials": {
+        "httpHeaderAuth": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Medusa Admin API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.MEDUSA_BACKEND_URL }}/admin/products",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "title": "={{ $('Transform Row → Medusa Shape').item.json.title }}",
+          "handle": "={{ $('Transform Row → Medusa Shape').item.json.handle }}",
+          "status": "published",
+          "category_handles": ["={{ $('Transform Row → Medusa Shape').item.json.category_handle }}"],
+          "variants": [
+            {
+              "sku": "={{ $('Transform Row → Medusa Shape').item.json.sku }}",
+              "title": "Standard",
+              "manage_inventory": true,
+              "prices": [
+                {
+                  "amount": "={{ $('Transform Row → Medusa Shape').item.json.price_paise }}",
+                  "currency_code": "inr",
+                  "region_id": "={{ $vars.MEDUSA_INDIA_REGION_ID }}"
+                }
+              ],
+              "metadata": {
+                "expiry_date": "={{ $('Transform Row → Medusa Shape').item.json.expiry_date }}",
+                "batch_no": "={{ $('Transform Row → Medusa Shape').item.json.batch_no }}"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-create-product",
+      "name": "Create New Product",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1580, 440],
+      "typeVersion": 4.2,
+      "credentials": {
+        "httpHeaderAuth": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Medusa Admin API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.MEDUSA_BACKEND_URL }}/admin/inventory-items/{{ $json.product.variants[0].inventory_items[0].inventory_item_id }}/location-levels",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "location_id": "={{ $vars.MEDUSA_STOCK_LOCATION_ID }}",
+          "stocked_quantity": "={{ $('Transform Row → Medusa Shape').item.json.quantity }}"
+        },
+        "options": {}
+      },
+      "id": "node-create-inventory-level",
+      "name": "Set Initial Inventory Level",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1800, 440],
+      "typeVersion": 4.2,
+      "credentials": {
+        "httpHeaderAuth": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Medusa Admin API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "multiplex",
+        "options": {}
+      },
+      "id": "node-merge",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "position": [2020, 300],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect sync stats from all processed items\nconst items = $input.all();\nlet success = 0;\nlet failed = 0;\nconst errors = [];\n\nfor (const item of items) {\n  if (item.json.error) {\n    failed++;\n    errors.push(String(item.json.error));\n  } else {\n    success++;\n  }\n}\n\nreturn [{\n  json: {\n    timestamp: new Date().toISOString(),\n    total: items.length,\n    success,\n    failed,\n    error_details: errors.join('; ') || 'None',\n  }\n}];"
+      },
+      "id": "node-collect-stats",
+      "name": "Collect Sync Stats",
+      "type": "n8n-nodes-base.code",
+      "position": [2240, 300],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sync Log",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $json.timestamp }}",
+            "Total Rows": "={{ $json.total }}",
+            "Success": "={{ $json.success }}",
+            "Failed": "={{ $json.failed }}",
+            "Errors": "={{ $json.error_details }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-write-sync-log",
+      "name": "Write to Sync Log Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [2460, 300],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Google Sheets - Medstore Service Account" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.STOREFRONT_URL }}/api/revalidate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-revalidate-secret", "value": "={{ $vars.REVALIDATE_SECRET }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-revalidate-storefront",
+      "name": "Trigger Next.js Revalidation",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [2680, 300],
+      "typeVersion": 4.2
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (15 min)": {
+      "main": [[{ "node": "Read Stock Sheet", "type": "main", "index": 0 }]]
+    },
+    "Read Stock Sheet": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    },
+    "Split In Batches": {
+      "main": [[{ "node": "Transform Row → Medusa Shape", "type": "main", "index": 0 }]]
+    },
+    "Transform Row → Medusa Shape": {
+      "main": [[{ "node": "Check Product Exists by SKU", "type": "main", "index": 0 }]]
+    },
+    "Check Product Exists by SKU": {
+      "main": [[{ "node": "Product Already Exists?", "type": "main", "index": 0 }]]
+    },
+    "Product Already Exists?": {
+      "main": [
+        [{ "node": "Extract Product IDs", "type": "main", "index": 0 }],
+        [{ "node": "Create New Product", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Product IDs": {
+      "main": [
+        [
+          { "node": "Update Inventory Quantity", "type": "main", "index": 0 },
+          { "node": "Update Variant Price", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Update Inventory Quantity": {
+      "main": [[{ "node": "Merge Results", "type": "main", "index": 0 }]]
+    },
+    "Update Variant Price": {
+      "main": [[{ "node": "Merge Results", "type": "main", "index": 1 }]]
+    },
+    "Create New Product": {
+      "main": [[{ "node": "Set Initial Inventory Level", "type": "main", "index": 0 }]]
+    },
+    "Set Initial Inventory Level": {
+      "main": [[{ "node": "Merge Results", "type": "main", "index": 2 }]]
+    },
+    "Merge Results": {
+      "main": [[{ "node": "Collect Sync Stats", "type": "main", "index": 0 }]]
+    },
+    "Collect Sync Stats": {
+      "main": [[{ "node": "Write to Sync Log Tab", "type": "main", "index": 0 }]]
+    },
+    "Write to Sync Log Tab": {
+      "main": [[{ "node": "Trigger Next.js Revalidation", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [{ "name": "medstore" }],
+  "meta": {
+    "instanceId": "medstore-sync-workflow",
+    "templateId": "medstore-stock-sync-v1"
+  },
+  "_SETUP_NOTES": {
+    "credentials_to_create": [
+      "Google Sheets API (Service Account) — name it 'Google Sheets - Medstore Service Account'",
+      "Header Auth — name it 'Medusa Admin API Key', Header Name: x-medusa-access-token"
+    ],
+    "variables_to_set_in_n8n": [
+      "MEDUSA_BACKEND_URL → https://api.medstore.flowcrafted.me",
+      "STOREFRONT_URL → https://medstore.flowcrafted.me",
+      "MEDUSA_STOCK_LOCATION_ID → copy from Medusa Admin after creating location",
+      "MEDUSA_INDIA_REGION_ID → copy from Medusa Admin after creating region",
+      "SPREADSHEET_ID → the Google Sheet ID from the URL",
+      "REVALIDATE_SECRET → same value as Next.js REVALIDATE_SECRET env var"
+    ],
+    "replace_credential_ids": "Search for REPLACE_WITH_CREDENTIAL_ID and replace with real n8n credential IDs after import",
+    "sheet_column_format": {
+      "A": "SKU",
+      "B": "Medicine Name",
+      "C": "Category (OTC|Prescription|Ayurvedic|Wellness|Diagnostics|Baby|Personal)",
+      "D": "Quantity",
+      "E": "MRP (₹)",
+      "F": "Expiry Date",
+      "G": "Batch No",
+      "H": "Notes"
+    },
+    "sync_log_tab_columns": [
+      "Timestamp", "Total Rows", "Success", "Failed", "Errors"
+    ]
+  }
+}

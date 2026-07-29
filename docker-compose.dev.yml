@@ -1,0 +1,76 @@
+# docker-compose.dev.yml — Development override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Differences from prod:
+#  - Source bind-mounted for hot-reload (medusa-backend)
+#  - Next.js runs in dev mode with hot-reload
+#  - Postgres + Redis ports exposed to host for direct inspection
+#  - No shared-tunnel-net needed locally (access via localhost)
+#  - CORS set to localhost origins
+
+version: "3.8"
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"   # expose to host for psql / Postico / TablePlus
+
+  redis:
+    ports:
+      - "6380:6379"   # 6380 on host to avoid conflict with any local Redis
+
+  medusa-backend:
+    build:
+      context: ./medusa-backend
+      target: builder    # stop at build stage for dev (includes devDeps)
+    command: npx medusa dev
+    volumes:
+      - ./medusa-backend/src:/app/src
+      - ./medusa-backend/medusa-config.ts:/app/medusa-config.ts
+    ports:
+      - "9000:9000"
+    environment:
+      MEDUSA_WORKER_MODE: server
+      NODE_ENV: development
+      ADMIN_CORS: http://localhost:7001,http://localhost:9000
+      STORE_CORS: http://localhost:3000
+      AUTH_CORS: http://localhost:7001,http://localhost:9000,http://localhost:3000
+    networks:
+      - medstore-net
+      # Override to remove shared-tunnel-net in dev
+      shared-tunnel-net: null
+
+  medusa-worker:
+    build:
+      context: ./medusa-backend
+      target: builder
+    command: npx medusa worker
+    volumes:
+      - ./medusa-backend/src:/app/src
+    environment:
+      MEDUSA_WORKER_MODE: worker
+      NODE_ENV: development
+    networks:
+      - medstore-net
+      shared-tunnel-net: null
+
+  nextjs-storefront:
+    build:
+      context: ./nextjs-storefront
+      target: deps       # stop at deps stage, run dev server
+    command: npm run dev
+    volumes:
+      - ./nextjs-storefront/src:/app/src
+      - ./nextjs-storefront/public:/app/public
+      - ./nextjs-storefront/next.config.js:/app/next.config.js
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_MEDUSA_BACKEND_URL: http://localhost:9000
+      NODE_ENV: development
+    networks:
+      - medstore-net
+      shared-tunnel-net: null
+
+networks:
+  shared-tunnel-net: null   # suppress external network requirement in dev

@@ -1,0 +1,123 @@
+version: "3.8"
+
+services:
+  # ─────────────────────────────────────────────────────────────────
+  # PostgreSQL — dedicated DB for this project
+  # ─────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: medstore-postgres
+    environment:
+      POSTGRES_DB: medusa_medstore
+      POSTGRES_USER: medusa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_medstore_data:/var/lib/postgresql/data
+    networks:
+      - medstore-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medusa -d medusa_medstore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────────
+  # Redis — DB index 2 to isolate from other projects on shared Redis
+  # ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: medstore-redis
+    command: redis-server --databases 16
+    networks:
+      - medstore-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────────
+  # Medusa Backend — API server + Admin UI
+  # Accessible externally via Cloudflare Tunnel
+  # ─────────────────────────────────────────────────────────────────
+  medusa-backend:
+    build:
+      context: ./medusa-backend
+      dockerfile: Dockerfile
+    container_name: medusa-backend
+    image: ghcr.io/${GITHUB_REPOSITORY:-local/medstore}/medusa-backend:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: ./medusa-backend/.env
+    environment:
+      MEDUSA_WORKER_MODE: server
+    networks:
+      - medstore-net
+      - shared-tunnel-net
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────
+  # Medusa Worker — background jobs / event subscribers
+  # Internal only — not exposed to Cloudflare Tunnel
+  # ─────────────────────────────────────────────────────────────────
+  medusa-worker:
+    build:
+      context: ./medusa-backend
+      dockerfile: Dockerfile
+    container_name: medusa-worker
+    image: ghcr.io/${GITHUB_REPOSITORY:-local/medstore}/medusa-backend:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: ./medusa-backend/.env
+    environment:
+      MEDUSA_WORKER_MODE: worker
+    networks:
+      - medstore-net
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────
+  # Next.js Storefront — customer-facing read-only pharmacy site
+  # Accessible externally via Cloudflare Tunnel
+  # ─────────────────────────────────────────────────────────────────
+  nextjs-storefront:
+    build:
+      context: ./nextjs-storefront
+      dockerfile: Dockerfile
+    container_name: medstore-storefront
+    image: ghcr.io/${GITHUB_REPOSITORY:-local/medstore}/nextjs-storefront:latest
+    depends_on:
+      - medusa-backend
+    env_file: ./nextjs-storefront/.env.local
+    networks:
+      - medstore-net
+      - shared-tunnel-net
+    restart: unless-stopped
+
+# ─────────────────────────────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────────────────────────────
+volumes:
+  postgres_medstore_data:
+    name: postgres_medstore_data
+
+# ─────────────────────────────────────────────────────────────────
+# Networks
+# shared-tunnel-net: existing network your cloudflared container
+#   is already attached to — declared external so this compose
+#   file doesn't try to recreate it.
+# medstore-net: internal-only, Postgres/Redis/worker communication
+# ─────────────────────────────────────────────────────────────────
+networks:
+  medstore-net:
+    name: medstore-net
+  shared-tunnel-net:
+    external: true
+    name: ${TUNNEL_NETWORK_NAME:-cloudflare-tunnel}
