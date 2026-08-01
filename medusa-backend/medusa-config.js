@@ -1,9 +1,14 @@
 // medusa-config.js — plain JavaScript so Node.js can load it
 // without ts-node. Functionally identical to medusa-config.ts.
-const { loadEnv, defineConfig } = require("@medusajs/framework/utils");
+const { defineConfig } = require("@medusajs/framework/utils");
 
-// Load environment variables from .env file
-loadEnv(process.env.NODE_ENV || "development", process.cwd());
+// Load .env file only in development.
+// In production (Docker), env vars come from docker-compose — loadEnv uses
+// override:true which would overwrite docker-compose values with stale image-baked ones.
+if (process.env.NODE_ENV !== 'production') {
+  const { loadEnv } = require("@medusajs/framework/utils");
+  loadEnv(process.env.NODE_ENV || 'development', process.cwd());
+}
 
 module.exports = defineConfig({
   // Admin panel is deployed separately (Vercel) pointing to this API.
