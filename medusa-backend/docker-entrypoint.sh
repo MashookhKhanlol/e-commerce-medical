@@ -13,7 +13,7 @@ echo "============================================="
 # The worker also runs this (idempotent) to ensure it's always
 # up-to-date even if restarted independently.
 echo "--> Running database migrations..."
-npx medusa db:migrate
+node_modules/.bin/medusa db:migrate
 
 echo "--> Migrations complete. Starting Medusa..."
-exec npx medusa start
+exec node index.js

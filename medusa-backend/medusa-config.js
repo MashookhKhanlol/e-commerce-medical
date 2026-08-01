@@ -6,6 +6,12 @@ const { loadEnv, defineConfig } = require("@medusajs/framework/utils");
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
 module.exports = defineConfig({
+  // Admin panel is deployed separately (Vercel) pointing to this API.
+  // Disabling it here skips the Vite admin bundle which fails in Docker
+  // due to a known Rollup/ESM issue in this Medusa version.
+  admin: {
+    disable: true,
+  },
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: process.env.REDIS_URL,
