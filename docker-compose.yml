@@ -52,11 +52,13 @@ services:
     env_file: ./medusa-backend/.env
     environment:
       MEDUSA_WORKER_MODE: server
+    ports:
+      - "127.0.0.1:9000:9000"  # Nginx proxies this — not exposed to internet directly
     volumes:
       - medusa_uploads:/app/uploads
+      - /dev/null:/app/.env:ro
     networks:
       - medstore-net
-      - shared-tunnel-net
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────
@@ -74,6 +76,8 @@ services:
     env_file: ./medusa-backend/.env
     environment:
       MEDUSA_WORKER_MODE: worker
+    volumes:
+      - /dev/null:/app/.env:ro
     networks:
       - medstore-net
     restart: unless-stopped
@@ -88,9 +92,10 @@ services:
     depends_on:
       - medusa-backend
     env_file: ./nextjs-storefront/.env.local
+    ports:
+      - "127.0.0.1:3001:3000"  # Port 3000 taken by next-portfolio; use 3001
     networks:
       - medstore-net
-      - shared-tunnel-net
     restart: unless-stopped
 
 # ─────────────────────────────────────────────────────────────────
@@ -110,6 +115,3 @@ volumes:
 networks:
   medstore-net:
     name: medstore-net
-  shared-tunnel-net:
-    external: true
-    name: ${TUNNEL_NETWORK_NAME:-cloudflare-tunnel}
