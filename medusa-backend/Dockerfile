@@ -11,7 +11,7 @@ RUN apk add --no-cache python3 make g++
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --fetch-retries 5 --fetch-retry-mintimeout 20000 --fetch-retry-maxtimeout 120000
+RUN npm ci --no-audit --no-fund
 
 COPY . .
 RUN npm run build
