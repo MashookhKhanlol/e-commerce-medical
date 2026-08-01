@@ -14,7 +14,7 @@ COPY package*.json ./
 RUN npm install --no-audit --no-fund --registry https://registry.npmmirror.com
 
 COPY . .
-RUN npm run build
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
 # ─────────────────────────────────────────────────────────────────
 # Stage 2: Runtime
