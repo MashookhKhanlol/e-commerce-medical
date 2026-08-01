@@ -14,7 +14,7 @@ COPY package*.json ./
 RUN npm install --no-audit --no-fund --registry https://registry.npmmirror.com
 
 COPY . .
-RUN NODE_ENV=production npm run build
+RUN npm run build
 
 # ─────────────────────────────────────────────────────────────────
 # Stage 2: Runtime
