@@ -7,8 +7,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE: ghcr.io/${{ github.repository }}/medusa-backend
-  STOREFRONT_IMAGE: ghcr.io/${{ github.repository }}/nextjs-storefront
+  BACKEND_IMAGE: ghcr.io/mashookhkhanlol/e-commerce-medical/medusa-backend
+  STOREFRONT_IMAGE: ghcr.io/mashookhkhanlol/e-commerce-medical/nextjs-storefront
 
 jobs:
   # ──────────────────────────────────────────────────────────────
