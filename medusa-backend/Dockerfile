@@ -1,12 +1,13 @@
 # ─────────────────────────────────────────────────────────────────
 # Stage 1: Build
-# Installs all deps (including devDeps), builds Medusa project.
+# Uses Debian (not Alpine) so Rollup/Vite native binaries work correctly.
+# Alpine's musl libc breaks @rollup/rollup-linux-x64-musl during admin bundling.
 # Output: .medusa/server/ — the compiled production bundle
 # ─────────────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:20 AS builder
 
 # Install build tools needed for native npm modules (bcrypt etc.)
-RUN apk add --no-cache python3 make g++
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
