@@ -93,7 +93,7 @@ services:
       - medusa-backend
     env_file: ./nextjs-storefront/.env.local
     ports:
-      - "127.0.0.1:3001:3000"  # Port 3000 taken by next-portfolio; use 3001
+      - "127.0.0.1:4000:3000"  # 3001 taken by n8n; use 4000
     networks:
       - medstore-net
     restart: unless-stopped
