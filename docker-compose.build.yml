@@ -1,0 +1,27 @@
+# docker-compose.build.yml
+# Used ONLY by GitHub Actions CI/CD to build and push images.
+# NOT used on the VPS — the VPS uses docker-compose.yml (pull only).
+#
+# Usage:
+#   docker buildx bake -f docker-compose.build.yml --push
+
+services:
+  medusa-backend:
+    build:
+      context: ./medusa-backend
+      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY}/medusa-backend:latest
+
+  nextjs-storefront:
+    build:
+      context: ./nextjs-storefront
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL}
+        NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: ${NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_SHOP_NAME: ${NEXT_PUBLIC_SHOP_NAME}
+        NEXT_PUBLIC_SHOP_PHONE: ${NEXT_PUBLIC_SHOP_PHONE}
+        NEXT_PUBLIC_SHOP_WHATSAPP: ${NEXT_PUBLIC_SHOP_WHATSAPP}
+        NEXT_PUBLIC_SHOP_ADDRESS: ${NEXT_PUBLIC_SHOP_ADDRESS}
+        NEXT_PUBLIC_SHOP_HOURS: ${NEXT_PUBLIC_SHOP_HOURS}
+    image: ghcr.io/${GITHUB_REPOSITORY}/nextjs-storefront:latest

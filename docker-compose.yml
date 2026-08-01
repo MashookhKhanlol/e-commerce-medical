@@ -38,15 +38,12 @@ services:
       retries: 5
 
   # ─────────────────────────────────────────────────────────────────
-  # Medusa Backend — API server + Admin UI
-  # Accessible externally via Cloudflare Tunnel
+  # Medusa Backend — pulls pre-built image from GHCR, no local build
   # ─────────────────────────────────────────────────────────────────
   medusa-backend:
-    build:
-      context: ./medusa-backend
-      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY}/medusa-backend:latest
     container_name: medusa-backend
-    image: ghcr.io/${GITHUB_REPOSITORY:-local/medstore}/medusa-backend:latest
+    pull_policy: always
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,21 +52,20 @@ services:
     env_file: ./medusa-backend/.env
     environment:
       MEDUSA_WORKER_MODE: server
+    volumes:
+      - medusa_uploads:/app/uploads
     networks:
       - medstore-net
       - shared-tunnel-net
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────
-  # Medusa Worker — background jobs / event subscribers
-  # Internal only — not exposed to Cloudflare Tunnel
+  # Medusa Worker — same image as backend, different worker mode
   # ─────────────────────────────────────────────────────────────────
   medusa-worker:
-    build:
-      context: ./medusa-backend
-      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY}/medusa-backend:latest
     container_name: medusa-worker
-    image: ghcr.io/${GITHUB_REPOSITORY:-local/medstore}/medusa-backend:latest
+    pull_policy: always
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,15 +79,12 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────
-  # Next.js Storefront — customer-facing read-only pharmacy site
-  # Accessible externally via Cloudflare Tunnel
+  # Next.js Storefront — pulls pre-built image from GHCR
   # ─────────────────────────────────────────────────────────────────
   nextjs-storefront:
-    build:
-      context: ./nextjs-storefront
-      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY}/nextjs-storefront:latest
     container_name: medstore-storefront
-    image: ghcr.io/${GITHUB_REPOSITORY:-local/medstore}/nextjs-storefront:latest
+    pull_policy: always
     depends_on:
       - medusa-backend
     env_file: ./nextjs-storefront/.env.local
@@ -106,13 +99,13 @@ services:
 volumes:
   postgres_medstore_data:
     name: postgres_medstore_data
+  medusa_uploads:
+    name: medusa_uploads
 
 # ─────────────────────────────────────────────────────────────────
 # Networks
-# shared-tunnel-net: existing network your cloudflared container
-#   is already attached to — declared external so this compose
-#   file doesn't try to recreate it.
-# medstore-net: internal-only, Postgres/Redis/worker communication
+# shared-tunnel-net: existing network cloudflared is attached to
+# medstore-net: internal Postgres/Redis/worker communication
 # ─────────────────────────────────────────────────────────────────
 networks:
   medstore-net:
