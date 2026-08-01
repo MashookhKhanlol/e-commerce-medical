@@ -89,6 +89,10 @@ jobs:
             echo "==> Deploying medstore-platform..."
             cd /home/max/websites/med-store/e-commerce-medical
 
+            # Ensure required external networks exist (idempotent)
+            docker network create cloudflare-tunnel 2>/dev/null || true
+            docker network create medstore-net 2>/dev/null || true
+
             # Pull the latest images (built and pushed in job 1)
             docker compose pull
 
