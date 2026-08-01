@@ -3,3 +3,5 @@ dist
 .medusa
 .env
 *.log
+# Use medusa-config.js instead (no ts-node needed, no type errors)
+medusa-config.ts
