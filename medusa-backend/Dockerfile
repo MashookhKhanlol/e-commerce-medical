@@ -11,7 +11,7 @@ RUN apk add --no-cache python3 make g++
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm install --no-audit --no-fund --registry https://registry.npmmirror.com
 
 COPY . .
 RUN npm run build

@@ -24,18 +24,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Generate lockfiles (enables npm ci in Docker)
-        run: |
-          cd medusa-backend
-          npm install --package-lock-only --no-audit --no-fund
-          cd ../nextjs-storefront
-          npm install --package-lock-only --no-audit --no-fund
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
